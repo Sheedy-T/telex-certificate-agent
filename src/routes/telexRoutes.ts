@@ -3,6 +3,7 @@ import { certificateAgent } from "../mastra-agent";
 
 const router = Router();
 
+// ✅ Handle POST requests from Telex
 router.post("/execute", async (req: Request, res: Response) => {
   try {
     const { name, course, date } = req.body;
@@ -25,13 +26,18 @@ router.post("/execute", async (req: Request, res: Response) => {
       result,
     });
   } catch (err: any) {
-    console.error("Error executing agent:", err);
+    console.error("❌ Error executing agent:", err);
     return res.status(500).json({
       ok: false,
       error: "Failed to process request",
       details: err.message,
     });
   }
+});
+
+// ✅ Add this GET route for easy testing / health check
+router.get("/execute", (req: Request, res: Response) => {
+  res.send("✅ Telex certificate agent is running. Use POST to execute.");
 });
 
 export default router;

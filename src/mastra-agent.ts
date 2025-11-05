@@ -15,7 +15,7 @@ const certificateSchema = z.object({
 
 type CertificateInput = z.infer<typeof certificateSchema>;
 
-// ✅ Custom Agent subclass with all required fields
+// ✅ Custom Agent subclass
 class CertificateAgent extends Agent {
   constructor() {
     super({
@@ -23,20 +23,23 @@ class CertificateAgent extends Agent {
       description: "Generates course completion certificates as PDFs.",
       instructions:
         "You are an AI agent that generates PDF certificates based on provided input.",
-      // ✅ FIX: Mastra model must be a model ID string
-      model: { id: "openai/gpt-4o-mini" },
+      model: { id: "openai/gpt-4o-mini" }, // Mastra model ID
     });
   }
 
   async execute(input: CertificateInput) {
+    // Validate input
     const { name, course, date } = certificateSchema.parse(input);
 
+    // Ensure certificates folder exists
     const certDir = path.resolve("./certificates");
     if (!fs.existsSync(certDir)) fs.mkdirSync(certDir);
 
+    // Create filename
     const filename = `${name.replace(/\s+/g, "_")}_certificate.pdf`;
     const filePath = path.join(certDir, filename);
 
+    // Generate PDF
     const doc = new PDFDocument({ size: "A4" });
     doc.pipe(fs.createWriteStream(filePath));
 
@@ -44,18 +47,18 @@ class CertificateAgent extends Agent {
     doc.moveDown(2);
     doc.fontSize(20).text(`This certifies that ${name}`, { align: "center" });
     doc.moveDown();
-    doc.text(`has successfully completed the ${course} course.`, {
-      align: "center",
-    });
+    doc.text(`has successfully completed the ${course} course.`, { align: "center" });
     doc.moveDown();
     doc.text(`Date: ${date}`, { align: "center" });
     doc.end();
 
     console.log(`✅ Certificate generated: ${filePath}`);
 
+    // ✅ Return A2A validator-friendly JSON
     return {
-      message: `✅ Certificate generated for ${name}`,
-      filePath,
+      output: `Certificate generated successfully for ${name}`,
+      status: "success",
+      filePath, // used by server to build download URL
     };
   }
 }
