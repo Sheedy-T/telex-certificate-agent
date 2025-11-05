@@ -1,0 +1,31 @@
+{
+  "name": "telex-certificate-agent",
+  "version": "1.0.0",
+  "description": "AI Agent that generates program completion certificates on Telex.im",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/server.ts",
+    "build": "tsc",
+    "start": "npm run build && node dist/server.js"
+  },
+  "dependencies": {
+    "@mastra/core": "^0.23.3",
+    "axios": "^1.7.2",
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "node-fetch": "^3.3.2",
+    "pdfkit": "^0.14.0",
+    "pg": "^8.11.0",
+    "uuid": "^9.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.30",
+    "@types/pdfkit": "^0.17.3",
+    "@types/uuid": "^9.0.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
