@@ -21,10 +21,13 @@ router.post("/execute", async (req: Request, res: Response) => {
         });
       }
 
+      // ✅ FIXED: Wrap fields inside `input` for Mastra agent
       const result = await certificateAgent.execute({
-        name,
-        course,
-        date: date || new Date().toISOString().split("T")[0],
+        input: {
+          name,
+          course,
+          date: date || new Date().toISOString().split("T")[0],
+        },
       });
 
       return res.json({
@@ -47,10 +50,13 @@ router.post("/execute", async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ FIXED: Wrap fields inside `input`
     const result = await certificateAgent.execute({
-      name,
-      course,
-      date: date || new Date().toISOString().split("T")[0],
+      input: {
+        name,
+        course,
+        date: date || new Date().toISOString().split("T")[0],
+      },
     });
 
     return res.json({
