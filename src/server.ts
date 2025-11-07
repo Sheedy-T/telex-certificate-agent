@@ -5,6 +5,7 @@ import path from "path";
 import telexRoutes from "./routes/telexRoutes";
 import { log } from "./utils/logger";
 import mastra, { certificateAgent } from "./mastra-agent";
+import a2aEndpoint from "./routes/a2a-endpoint";
 
 dotenv.config();
 
@@ -16,7 +17,7 @@ app.use("/certificates", express.static(path.resolve("./certificates")));
 
 // Normal telex/manual route(s)
 app.use("/telex", telexRoutes);
-
+app.use("/", a2aEndpoint);
 // Mastra init log
 if (mastra) {
   log("🤖 Mastra certificate agent initialized successfully");
