@@ -17,7 +17,8 @@ app.use("/certificates", express.static(path.resolve("./certificates")));
 
 // Normal telex/manual route(s)
 app.use("/telex", telexRoutes);
-app.use("/", a2aEndpoint);
+app.use("/", a2aEndpoint); // This includes the refactored /a2a-endpoint from a2a-endpoint.ts
+
 // Mastra init log
 if (mastra) {
   log("🤖 Mastra certificate agent initialized successfully");
@@ -25,17 +26,32 @@ if (mastra) {
   log("⚠️ Mastra agent failed to initialize");
 }
 
-// A2A endpoint (Telex validator expects this)
-app.post("/a2a-endpoint", async (req, res) => {
+// A2A endpoint (Telex validator expects this) - Use a different path or remove if a2a-endpoint.ts is intended to be the primary handler
+// Since both files define /a2a-endpoint, I will assume the one in `server.ts` is the fallback/Mastra one.
+app.post("/a2a-endpoint-mastra", async (req, res) => { // Renamed for clarity to avoid conflict
   try {
     const { input } = req.body;
     if (!input) return res.status(400).json({ error: "Missing 'input' field" });
 
-    let inputData;
+    let inputData: any;
     try {
+      // The Mastra agent in mastra-agent.ts expects a JSON object of {name, course, date}
+      // The input from the user (e.g., in the chat screenshot) is a string, which is typically parsed by the router, 
+      // but here we try to parse it as JSON for the agent execution.
       inputData = typeof input === "string" ? JSON.parse(input) : input;
     } catch {
-      return res.status(400).json({ error: "Invalid JSON in 'input' field' " });
+      // If JSON parsing fails, attempt to parse the string fields like a2a-endpoint.ts
+      const regex = /(\w+)=["']([^"']+)["']/g;
+      const fields: any = {};
+      let match;
+      let rawInput = typeof input === 'string' ? input : JSON.stringify(input);
+      while ((match = regex.exec(rawInput))) {
+          fields[match[1]] = match[2];
+      }
+      inputData = fields;
+      if (!inputData.name || !inputData.course) {
+          return res.status(400).json({ error: "Invalid input format or missing fields in 'input' field" });
+      }
     }
 
     // Execute Mastra agent (wrap in { input })
@@ -45,8 +61,20 @@ app.post("/a2a-endpoint", async (req, res) => {
     const fileUrl = result?.output?.fileUrl || null;
     const downloadUrl = fileUrl ? fileUrl : `/certificates/${path.basename(result?.output?.filePath || "certificate.pdf")}`;
 
+    const { name, course, date } = inputData;
+
+    // Construct the final rich response message
+    const finalMessage = `✅ Certificate Generated Successfully!
+
+📄 Name: ${name || "N/A"}
+🎓 Course: ${course || "N/A"}
+📅 Date: ${date || "N/A"}
+
+🔗 Download Certificate: ${downloadUrl}`;
+
+
     return res.json({
-      output: result?.output?.message || "Certificate generated",
+      output: finalMessage,
       status: "success",
       download_url: downloadUrl,
     });

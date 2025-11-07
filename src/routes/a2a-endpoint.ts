@@ -15,12 +15,36 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Helper function to handle async file stream writing
+const streamToPromise = (stream: fs.WriteStream) => {
+  return new Promise<void>((resolve, reject) => {
+    stream.on("finish", resolve);
+    stream.on("error", reject);
+  });
+};
+
+// Helper function to handle async Cloudinary upload
+const uploadToCloudinary = (localPath: string) => {
+  return new Promise<UploadApiResponse>((resolve, reject) => {
+    cloudinary.uploader.upload(
+      localPath,
+      { resource_type: "raw", folder: "certificates" },
+      (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
+        if (error || !result) {
+          return reject(error || new Error("Cloudinary result missing"));
+        }
+        resolve(result);
+      }
+    );
+  });
+};
+
 // ===============================
 // 🧠 Telex A2A Endpoint
 // ===============================
 router.post("/a2a-endpoint", async (req, res) => {
   try {
-    const { input } = req.body; // Telex sends inline input as a single string
+    const { input } = req.body;
 
     if (!input || typeof input !== "string") {
       return res.status(400).json({ error: "Missing or invalid 'input' field" });
@@ -28,7 +52,6 @@ router.post("/a2a-endpoint", async (req, res) => {
 
     // -------------------------------
     // Parse inline command input: name, course, date
-    // Example: name="Shedrack Tabansi" course="AI Integration Bootcamp" date="October 20, 2023"
     // -------------------------------
     const regex = /(\w+)=["']([^"']+)["']/g;
     const fields: any = {};
@@ -45,7 +68,7 @@ router.post("/a2a-endpoint", async (req, res) => {
     console.log("Parsed Telex input:", { name, course, date });
 
     // -------------------------------
-    // Generate PDF
+    // Generate PDF locally
     // -------------------------------
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const fileName = `${name.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
@@ -88,35 +111,47 @@ router.post("/a2a-endpoint", async (req, res) => {
     // -------------------------------
     // Wait for local PDF to finish
     // -------------------------------
-    writeStream.on("finish", () => {
-      // Try Cloudinary upload
-      cloudinary.uploader.upload(
-        localPath,
-        { resource_type: "raw", folder: "certificates" },
-        (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
-          if (error || !result) {
-            console.error("❌ Cloudinary upload failed, using local fallback:", error);
+    await streamToPromise(writeStream);
+    console.log(`✅ Local certificate file created: ${localPath}`);
 
-            return res.json({
-              message: `✅ Certificate generated successfully for ${name}, using local fallback.`,
-              fileUrl: `/certificates/${fileName}`,
-              localFallbackUrl: `/certificates/${fileName}`,
-            });
-          }
+    let fileUrl: string;
+    const localFallbackUrl = `/certificates/${fileName}`;
 
-          // Success: Cloudinary uploaded
-          return res.json({
-            message: `✅ Certificate generated successfully for ${name}.`,
-            fileUrl: result.secure_url,
-            localFallbackUrl: `/certificates/${fileName}`,
-          });
-        }
-      );
+    // -------------------------------
+    // Cloudinary upload (or local fallback)
+    // -------------------------------
+    try {
+      const result = await uploadToCloudinary(localPath);
+      fileUrl = result.secure_url;
+      console.log("✅ Cloudinary upload successful:", fileUrl);
+    } catch (error) {
+      console.error("❌ Cloudinary upload failed, using local fallback:", error);
+      // Use the local fallback URL if Cloudinary fails
+      fileUrl = localFallbackUrl;
+    }
+
+    // -------------------------------
+    // Send final rich response (This is guaranteed to run, preventing timeout)
+    // -------------------------------
+    const finalMessage = `✅ Certificate Generated Successfully!
+
+📄 Name: ${name}
+🎓 Course: ${course}
+📅 Date: ${date}
+
+🔗 Download Certificate: ${fileUrl}`;
+
+    return res.json({
+      message: finalMessage,
+      fileUrl: fileUrl,
+      localFallbackUrl: localFallbackUrl,
     });
-
-  } catch (err) {
+  } catch (err: any) {
     console.error("❌ Error generating certificate:", err);
-    return res.status(500).json({ error: "Failed to generate certificate" });
+    return res.status(500).json({
+      error: "Failed to generate certificate",
+      details: err.message
+    });
   }
 });
 
