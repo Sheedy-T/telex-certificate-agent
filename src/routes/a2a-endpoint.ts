@@ -1,23 +1,24 @@
 import express from "express";
 import PDFDocument from "pdfkit";
-import stream from "stream";
+import fs from "fs";
+import path from "path";
 import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
 
 const router = express.Router();
 
-/* ===============================
-   🔧 Cloudinary Configuration
-================================= */
+// ===============================
+// 🔧 Cloudinary Configuration
+// ===============================
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-/* ===============================
-   🧠 Telex A2A Endpoint
-   Generates PDF certificates and uploads them to Cloudinary
-================================= */
+// ===============================
+// 🧠 Telex A2A Endpoint
+// Generates PDF certificates and uploads to Cloudinary (with local fallback)
+// ===============================
 router.post("/a2a-endpoint", async (req, res) => {
   try {
     const { name, course, date } = req.body;
@@ -29,14 +30,22 @@ router.post("/a2a-endpoint", async (req, res) => {
       });
     }
 
-    // 📄 Create a PDF document in memory
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
-    const pdfStream = new stream.PassThrough();
-    doc.pipe(pdfStream);
+    console.log("Mastra input:", req.body); // For debugging
 
-    /* ===============================
-       🎨 Certificate Design
-    ============================== */
+    // Create PDF document
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+
+    // Generate a temporary filename for local fallback
+    const fileName = `${name.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
+    const localDir = path.resolve("./certificates");
+    if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+    const localPath = path.join(localDir, fileName);
+    const writeStream = fs.createWriteStream(localPath);
+
+    // Pipe PDF to local file and to Cloudinary
+    doc.pipe(writeStream);
+
+    // Certificate design
     doc
       .fontSize(28)
       .font("Helvetica-Bold")
@@ -76,28 +85,37 @@ router.post("/a2a-endpoint", async (req, res) => {
 
     doc.end();
 
-    /* ===============================
-       ☁️ Upload PDF to Cloudinary
-    ============================== */
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { resource_type: "raw", folder: "certificates" },
-      (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
-        if (error || !result) {
-          console.error("❌ Cloudinary upload failed:", error);
-          return res.status(500).json({ error: "Cloudinary upload failed" });
+    // Wait until the PDF is fully written locally
+    writeStream.on("finish", () => {
+      // Try Cloudinary upload
+      cloudinary.uploader.upload(
+        localPath,
+        { resource_type: "raw", folder: "certificates" },
+        (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
+          if (error || !result) {
+            console.error("❌ Cloudinary upload failed, using local fallback:", error);
+
+            // Respond with local fallback URL
+            return res.json({
+              output: {
+                message: `Certificate generated successfully for ${name}, using local file fallback.`,
+                fileUrl: `/certificates/${fileName}`,
+              },
+              status: "success",
+            });
+          }
+
+          // Success with Cloudinary
+          return res.json({
+            output: {
+              message: `Certificate generated successfully for ${name}.`,
+              fileUrl: result.secure_url,
+            },
+            status: "success",
+          });
         }
-
-        // ✅ Respond to Telex with success message
-        res.json({
-          message: `Certificate generated successfully for ${name}.`,
-          certificate_url: result.secure_url,
-          details: { name, course, date },
-        });
-      }
-    );
-
-    // Pipe the PDF stream to Cloudinary upload
-    pdfStream.pipe(uploadStream);
+      );
+    });
 
   } catch (err) {
     console.error("❌ Error generating certificate:", err);
