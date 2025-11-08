@@ -2,15 +2,13 @@ import express from "express";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
-// import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary"; // Removed Cloudinary import
+// Removed: import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
 
 const router = express.Router();
 
 // ===============================
-// 🔧 Configuration (Cloudinary removed)
+// 🔧 Helper Functions
 // ===============================
-// Cloudinary config removed.
-// Note: Ensure your hosting environment properly serves files from the /certificates directory.
 
 // Helper function to handle async file stream writing
 const streamToPromise = (stream: fs.WriteStream) => {
@@ -33,6 +31,7 @@ router.post("/a2a-endpoint", async (req, res) => {
 
     // -------------------------------
     // Parse inline command input: name, course, date
+    // Example: name="Shedrack Tabansi" course="AI Integration Bootcamp" date="October 20, 2023"
     // -------------------------------
     const regex = /(\w+)=["']([^"']+)["']/g;
     const fields: any = {};
@@ -43,7 +42,7 @@ router.post("/a2a-endpoint", async (req, res) => {
 
     const { name, course, date } = fields;
     if (!name || !course || !date) {
-      return res.status(400).json({ error: "Missing required fields: name, course, or date" });
+      return res.status(400).json({ error: "Missing required fields: name, course, or date in input string." });
     }
 
     console.log("Parsed Telex input:", { name, course, date });
@@ -90,15 +89,16 @@ router.post("/a2a-endpoint", async (req, res) => {
     doc.end();
 
     // -------------------------------
-    // Wait for local PDF to finish
+    // 1. Await local PDF to finish writing
     // -------------------------------
     await streamToPromise(writeStream);
     console.log(`✅ Local certificate file created: ${localPath}`);
 
-    const fileUrl = `/certificates/${fileName}`; // Direct local URL
+    // The file URL is now the local path served publicly
+    const fileUrl = `/certificates/${fileName}`; 
 
     // -------------------------------
-    // Send final rich response (Guaranteed to run quickly)
+    // 2. Send final rich response
     // -------------------------------
     const finalMessage = `✅ Certificate Generated Successfully!
 
@@ -111,7 +111,7 @@ router.post("/a2a-endpoint", async (req, res) => {
     return res.json({
       message: finalMessage,
       fileUrl: fileUrl,
-      download_url: fileUrl, // Use download_url as required by some A2A validators
+      localFallbackUrl: fileUrl, // fileUrl and localFallbackUrl are now the same
     });
   } catch (err: any) {
     console.error("❌ Error generating certificate:", err);
