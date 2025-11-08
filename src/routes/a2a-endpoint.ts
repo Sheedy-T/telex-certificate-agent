@@ -7,10 +7,9 @@ import path from "path";
 const router = express.Router();
 
 // ===============================
-// 🔧 Helper Functions
+// 🔧 Helper Function for Stream to Promise
 // ===============================
-
-// Helper function to handle async file stream writing
+// This ensures we can use 'await' to wait for the local file write to finish
 const streamToPromise = (stream: fs.WriteStream) => {
   return new Promise<void>((resolve, reject) => {
     stream.on("finish", resolve);
@@ -31,7 +30,6 @@ router.post("/a2a-endpoint", async (req, res) => {
 
     // -------------------------------
     // Parse inline command input: name, course, date
-    // Example: name="Shedrack Tabansi" course="AI Integration Bootcamp" date="October 20, 2023"
     // -------------------------------
     const regex = /(\w+)=["']([^"']+)["']/g;
     const fields: any = {};
@@ -51,6 +49,7 @@ router.post("/a2a-endpoint", async (req, res) => {
     // Generate PDF locally
     // -------------------------------
     const doc = new PDFDocument({ size: "A4", margin: 50 });
+    // Use Date.now() for unique filename
     const fileName = `${name.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
     const localDir = path.resolve("./certificates");
     if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
@@ -58,7 +57,7 @@ router.post("/a2a-endpoint", async (req, res) => {
     const writeStream = fs.createWriteStream(localPath);
     doc.pipe(writeStream);
 
-    // Certificate design
+    // Certificate design (from your file)
     doc
       .fontSize(28)
       .font("Helvetica-Bold")
@@ -89,16 +88,18 @@ router.post("/a2a-endpoint", async (req, res) => {
     doc.end();
 
     // -------------------------------
-    // 1. Await local PDF to finish writing
+    // 1. AWAIT local PDF to finish writing
+    // This is the critical fix for the timeout.
     // -------------------------------
     await streamToPromise(writeStream);
     console.log(`✅ Local certificate file created: ${localPath}`);
 
-    // The file URL is now the local path served publicly
-    const fileUrl = `/certificates/${fileName}`; 
+    // The final URL is the local path served publicly
+    const fileUrl = `/certificates/${fileName}`;
 
     // -------------------------------
     // 2. Send final rich response
+    // This now runs immediately after the file is saved.
     // -------------------------------
     const finalMessage = `✅ Certificate Generated Successfully!
 
@@ -109,7 +110,7 @@ router.post("/a2a-endpoint", async (req, res) => {
 🔗 Download Certificate: ${fileUrl}`;
 
     return res.json({
-      message: finalMessage,
+      message: finalMessage, // The rich message for the user
       fileUrl: fileUrl,
       localFallbackUrl: fileUrl, // fileUrl and localFallbackUrl are now the same
     });

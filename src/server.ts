@@ -19,7 +19,8 @@ app.use("/certificates", express.static(path.resolve("./certificates")));
 app.use("/telex", telexRoutes);
 
 // ✅ PRIMARY A2A ENDPOINT: This registers the quick, rich handler from a2a-endpoint.ts
-app.use("/", a2aEndpoint); 
+// This is now the ONLY handler for this route.
+app.use("/", a2aEndpoint);
 
 // Mastra init log
 if (mastra) {
@@ -27,6 +28,8 @@ if (mastra) {
 } else {
   log("⚠️ Mastra agent failed to initialize");
 }
+
+// ❌ The conflicting app.post("/a2a-endpoint", ...) handler has been removed.
 
 // health
 app.get("/", (_req, res) => res.send("✅ Telex Certificate Agent is live"));
