@@ -2,40 +2,21 @@ import express from "express";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
-import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
+// import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary"; // Removed Cloudinary import
 
 const router = express.Router();
 
 // ===============================
-// 🔧 Cloudinary Configuration
+// 🔧 Configuration (Cloudinary removed)
 // ===============================
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Cloudinary config removed.
+// Note: Ensure your hosting environment properly serves files from the /certificates directory.
 
 // Helper function to handle async file stream writing
 const streamToPromise = (stream: fs.WriteStream) => {
   return new Promise<void>((resolve, reject) => {
     stream.on("finish", resolve);
     stream.on("error", reject);
-  });
-};
-
-// Helper function to handle async Cloudinary upload
-const uploadToCloudinary = (localPath: string) => {
-  return new Promise<UploadApiResponse>((resolve, reject) => {
-    cloudinary.uploader.upload(
-      localPath,
-      { resource_type: "raw", folder: "certificates" },
-      (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
-        if (error || !result) {
-          return reject(error || new Error("Cloudinary result missing"));
-        }
-        resolve(result);
-      }
-    );
   });
 };
 
@@ -114,24 +95,10 @@ router.post("/a2a-endpoint", async (req, res) => {
     await streamToPromise(writeStream);
     console.log(`✅ Local certificate file created: ${localPath}`);
 
-    let fileUrl: string;
-    const localFallbackUrl = `/certificates/${fileName}`;
+    const fileUrl = `/certificates/${fileName}`; // Direct local URL
 
     // -------------------------------
-    // Cloudinary upload (or local fallback)
-    // -------------------------------
-    try {
-      const result = await uploadToCloudinary(localPath);
-      fileUrl = result.secure_url;
-      console.log("✅ Cloudinary upload successful:", fileUrl);
-    } catch (error) {
-      console.error("❌ Cloudinary upload failed, using local fallback:", error);
-      // Use the local fallback URL if Cloudinary fails
-      fileUrl = localFallbackUrl;
-    }
-
-    // -------------------------------
-    // Send final rich response (This is guaranteed to run, preventing timeout)
+    // Send final rich response (Guaranteed to run quickly)
     // -------------------------------
     const finalMessage = `✅ Certificate Generated Successfully!
 
@@ -144,7 +111,7 @@ router.post("/a2a-endpoint", async (req, res) => {
     return res.json({
       message: finalMessage,
       fileUrl: fileUrl,
-      localFallbackUrl: localFallbackUrl,
+      download_url: fileUrl, // Use download_url as required by some A2A validators
     });
   } catch (err: any) {
     console.error("❌ Error generating certificate:", err);
